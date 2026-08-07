@@ -1,0 +1,30 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS junk
+.DS_Store
+
+# Never commit PDFs, wherever they live
+*.pdf
+
+# Never commit Excel files, wherever they live
+*.xlsx
+
+# Data: ignore everything...
+data/**
+# ...except the .gitkeep markers that preserve folder structure
+!data/**/
+!data/**/.gitkeep
+
+# Never commit CSV files, wherever they live
+*.csv
+
+# Never commit .Rhistory files, wherever they live
+*.Rhistory
