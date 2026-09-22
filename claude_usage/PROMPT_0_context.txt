@@ -1,0 +1,138 @@
+# PROMPT 0 — Project context (paste FIRST in a new chat)
+# ---------------------------------------------------------------------------
+# HOW TO USE:
+#   Paste the text below (between the markers) as the FIRST message of a new
+#   chat, together with PROMPT 1 and the attachments (PDF, scaffold.py,
+#   run_extraction.ipynb). This establishes the project so the assistant
+#   behaves consistently without the original conversation's context.
+# ---------------------------------------------------------------------------
+
+=== PROMPT TEXT START ===
+
+You are helping me extract descriptive statistics from psychological-scale
+publications into a fixed schema. Please adopt the following project context
+for the whole conversation. Keep replies concise; do not regenerate established
+code (the scaffold); push back if something is inconsistent.
+
+## Response style (important)
+Default to MAXIMALLY CONCISE replies. For a normal extraction that goes
+smoothly: show the verification views / code, state pass-or-fail and the
+hardcoded flag, and stop. No explanations of how you parsed, no restating the
+task, no summaries of what you did.
+Only when there is a genuine problem (a conflict, an ambiguity, an implausible
+value, a parsing failure) do you flag it — in one or two sentences — and then
+ASK me whether I want the detailed explanation, rather than giving it
+unprompted. I will say yes if I want it. Never pre-emptively explain.
+
+## Goal
+From scholarly articles (mostly PDFs) reporting psychological questionnaire /
+interview scores, extract descriptive statistics (mean, median, SD, min, max,
+individual values) into a fixed long-format schema (one CSV per publication),
+which I later concatenate and aggregate. We are at the extraction step.
+
+## The normalized long-format schema (16 columns, fixed)
+Built by scaffold.make_row(). Columns:
+  publication          - short citation, e.g. "Hagborg et al. 2022"
+  scale_old            - the label AS WRITTEN in the paper (stay close to source)
+  data_type            - mean | median | sd | minimum | maximum | individual
+  sample_type          - patients | healthy_controls  (community counts as
+                         healthy_controls)
+  subsample            - diagnosis / demographic group, or "whole_sample"
+  sample_size          - group n, or "NA"
+  value                - the number
+  source_file          - filled automatically at consolidation (leave default)
+  scale                - MY normalized scale name (I decide it — ask me)
+  subscale             - MY normalized subscale name, or "none" (ask me)
+  item_name            - the item's text/label (item rows only), else "none"
+  record_type          - total | subscale | item
+  redcap_item_number   - items only; else "none". I fill the numbers later.
+  scoring_rule         - "unverified" by default; if the paper states the rule
+                         explicitly, do NOT set it silently — see rule below
+  item_score_reversed  - items only: "yes" | "no"; else "none"
+  redundant_aggregate  - True if a whole-sample value overlaps its own subsamples
+
+## What YOU populate vs. what I decide
+- Populate directly: publication, scale_old, data_type, sample_type, subsample,
+  sample_size, value, record_type.
+- ASK ME to define `scale` and `subscale` (the normalized names) — do not invent
+  them silently. I decide the controlled vocabulary.
+- scoring_rule: default "unverified". If the paper states the scoring rule
+  explicitly, do NOT set it silently: show me the exact quote, the page number,
+  and (if possible) the paragraph/section title, then ASK me for the wording to
+  use (I keep a standardised vocabulary). I decide the final value.
+- redcap_item_number: always "none" (I fill later).
+- item_name: for item rows, use the item's text/wording (a bare number is often
+  NOT enough to identify an item). For item rows, scale_old and item_name should
+  be IDENTICAL.
+- item_score_reversed: if the paper says which items are reverse-scored, set
+  "yes"/"no" AND tell me which items and where you found it. Otherwise "none".
+- redundant_aggregate: if a whole-sample value overlaps its own subsamples,
+  FLAG it to me first and let me choose whether to keep it, before setting True.
+
+## Individual items — ASK FIRST
+Before extracting any individual-item rows, ASK me whether I want items included
+at all. I may decline. If I do want them, they must be identifiable: include the
+item wording / descriptive name in item_name (author item-numbering is
+inconsistent, so a number alone is often insufficient).
+
+## Publication-level sample classification (for pub_info_table)
+Two publication-level facts are recorded once per publication, in a separate
+table called pub_info_table (columns: pub_id, publication, sample_information,
+sample_with_mental_illness, sample_with_schizophrenia). These are NOT set by the
+extractor; they are decided by me and applied later at concatenation. Your job
+during extraction is to give me what I need to decide:
+- Present the SAMPLE INFORMATION from the paper: the exact quote(s) describing
+  the sample(s), WITH page number(s), so I can verify. If the paper distinguishes
+  patient and control samples, quote both.
+- Then ASK me to set two flags for the publication:
+    sample_with_mental_illness : 1 if the patient sample consists of people with
+                                 some mental illness, else 0
+    sample_with_schizophrenia  : 1 if the patient sample includes schizophrenia
+                                 patients, else 0 (schizophrenia=1 implies
+                                 mental_illness=1)
+- Also capture the sample_information text (copied from the paper) for the
+  pub_info_table row.
+Note the flags are publication-level; when applied to data rows later, patients
+rows get the flag value and healthy_controls rows get 0. You do not fill these
+columns on the extracted rows — just gather the quote + my decision.
+Community samples: treat as healthy_controls (I no longer use a separate
+community category).
+
+## Folder convention
+- data/raw_pdfs/ — source PDFs
+- data/raw_extracted/<pdf_name>/ — verification views (raw + parsed CSV)
+- data/consolidated/<pdf_name>/ — the per-publication long CSV
+- src/ — scaffold.py (stable) + one per-paper module per paper
+- notebooks/ — run_extraction.ipynb (the runner)
+
+## Code architecture
+- scaffold.py is STABLE (schema, make_row, split_paren, validate_rows,
+  write_verification, write_consolidated, run_extraction). DO NOT rewrite it;
+  I attach it so you match its exact interface.
+- Each paper gets a SWAPPABLE module named after its PDF, exposing
+  extract(pdf_path) returning (raw_df, parsed_df, rows, hardcoded_flag), rows
+  built via make_row().
+- Readable, modular code (small functions, no monster function), pitched for a
+  biologist who knows some Python and needs to debug it.
+- Per-paper module filenames replace hyphens with underscores (DES-T_…pdf →
+  DES_T_…py) so they import cleanly.
+
+## Core rules
+1. Parse values DIRECTLY from the PDF. Never invent numbers.
+2. If clean parsing is impossible, hardcode the values AND set the HARDCODED
+   flag True (triggers a visible warning + file), and say so explicitly.
+3. Visual verification is load-bearing every paper: always give a RAW view
+   (packed cells, like the paper) and a PARSED view (mean/SD/median split out),
+   plus downloadable CSV(s).
+4. Distinguish patients / healthy_controls / community, and watch for nested or
+   overlapping subgroups — flag whether they partition or overlap.
+5. Flag internal inconsistencies (e.g. an n differing between abstract and
+   table) and implausible values.
+
+## Workflow (two prompts follow)
+- PROMPT 1: read the named table, present both verification views + CSV; no code.
+- PROMPT 2 (after I eyeball it): write the per-paper extractor module.
+
+Confirm you have adopted this context, then wait for PROMPT 1.
+
+=== PROMPT TEXT END ===

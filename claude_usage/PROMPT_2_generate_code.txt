@@ -1,0 +1,61 @@
+# PROMPT 2 — Generate the per-paper extraction code
+# (workflow step c)
+# ---------------------------------------------------------------------------
+# HOW TO USE:
+#   - Send AFTER you have eyeballed the verification view from PROMPT 1, in the
+#     SAME chat. scaffold.py and the PDF are already attached.
+# ---------------------------------------------------------------------------
+
+=== PROMPT TEXT START ===
+
+The verification view looks correct (I checked it against the PDF), and I have
+confirmed the normalized scale/subscale names and whether to include items.
+Now generate the per-paper extraction code.
+
+REQUIREMENTS:
+  1. Do NOT rewrite scaffold.py. Write ONLY the per-paper module, matching the
+     scaffold's interface.
+  2. Name the file after the PDF, as a valid Python module name: drop the
+     extension and replace hyphens (and any character invalid in an identifier)
+     with underscores. E.g. DES-T_Modestin_et_al_2004.pdf →
+     DES_T_Modestin_et_al_2004.py. This lets the notebook do
+     `from <module> import extract`.
+  3. The module must:
+       - read the values DIRECTLY from the PDF (no hardcoded numbers) if at all
+         possible;
+       - if clean parsing is impossible, hardcode the values AND set the
+         HARDCODED flag True (scaffold then warns + writes the warning file);
+         tell me explicitly and why;
+       - expose extract(pdf_path) returning the four-tuple
+         (raw_df, parsed_df, rows, hardcoded_flag), with `rows` built via
+         scaffold.make_row();
+       - reproduce EXACTLY the verified numbers and row structure.
+  4. Populate the schema columns per the agreed rules:
+       - Direct: publication, scale_old (label as in the paper), data_type,
+         sample_type, subsample, sample_size, value, record_type.
+       - scale / subscale: use the normalized names I confirmed.
+       - scoring_rule: use the value I confirmed (default "unverified"; if the
+         paper stated it explicitly I will have given you the standardised
+         wording to use).
+       - redcap_item_number: "none".
+       - item_name: item wording for item rows, else "none". For item rows
+         scale_old and item_name are identical.
+       - item_score_reversed: "yes"/"no" for items if the paper says so, else
+         "none".
+       - redundant_aggregate: only True for whole-sample rows I confirmed are
+         redundant; otherwise False. (make_row / scaffold defaults cover the
+         fields you don't set.)
+       - Do NOT set pub_id or the illness columns (sample_with_mental_illness,
+         sample_with_schizophrenia) in the extractor — those are added later at
+         concatenation, derived from pub_info_table.
+  5. Confirm, by running it, that the code reproduces the verified values, and
+     show me the resulting long-format rows.
+  6. Outputs go to the established folders (raw_extracted/ for the two
+     verification CSVs, consolidated/ for the long CSV).
+  7. Readable, modular code with brief comments on the paper-specific layout
+     assumptions (page, token positions, row labels) so I can debug later.
+
+After this I run it from run_extraction.ipynb by importing this module's
+extract function and setting the PDF filename in the run cell.
+
+=== PROMPT TEXT END ===

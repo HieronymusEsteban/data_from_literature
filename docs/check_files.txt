@@ -1,0 +1,12 @@
+# Display files by size:
+ls -lhS
+
+# Display files by size, including hidden files:
+ls -lhSa
+
+# Display jupyter lab notebooks specifically by size:
+find . -name "*.ipynb" -not -path "*/.ipynb_checkpoints/*" -exec du -h {} + | sort -rh
+
+# Strip jupyter lab notebooks of their output:
+source .venv/bin/activate
+find . -name "*.ipynb" -not -path "*/.ipynb_checkpoints/*" -exec jupyter nbconvert --clear-output --inplace {} +

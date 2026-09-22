@@ -1,94 +1,93 @@
 """
 query.py
 ========
-STABLE module (step 4 — selection). SQL-like querying of the consolidated
-long-format table, by column values. No SQL and no query strings: you pass
-plain column=value filters, like a SELECT ... WHERE in SQL.
+SQL-like querying of the consolidated long-format table, for a biologist who
+thinks in SELECT ... WHERE terms. No SQL, no query strings: you pass plain
+column=value filters.
 
-Typical use (in a notebook):
+Think of each function as one SQL idea:
+  select()    -> SELECT * WHERE col=value AND col=value ...
+  distinct()  -> SELECT DISTINCT col
+  overview()  -> a quick "what is in this table?" summary
 
-    import pandas as pd
-    from query import select
-
-    df = pd.read_csv("data/all_consolidated.csv")
-
-    # SELECT * WHERE scale='DES-T' AND sample='patients' AND data_type='mean'
-    select(df, scale="DES-T", sample="patients", data_type="mean")
-
-By default it prints a readable table AND returns the filtered dataframe, so you
-can either just look, or keep the result for further work.
+All functions RETURN a dataframe (so you can keep working with the result).
+They do not print unless you ask (show=True), so the notebook stays tidy.
 """
-
-from __future__ import annotations
 
 import pandas as pd
 
 
 # ---------------------------------------------------------------------------
-# 1. Core selection by column = value (the SQL-like WHERE).
+# SELECT ... WHERE col=value AND col=value ...
 # ---------------------------------------------------------------------------
-def select(df, show=False, max_show=50, **filters):
-    """Return rows of `df` matching ALL the given column=value filters.
+def select(df, show=False, **filters):
+    """Return the rows of `df` that match ALL the given column=value filters.
 
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        The consolidated table.
-    show : bool
-        If True, print a readable table of the result.
-    max_show : int
-        Cap on how many rows to print (the full result is still returned).
-    **filters :
-        column=value pairs. A value may be a single value (scale="DES-T")
-        or a list/tuple of accepted values (sample=["patients", "community"]),
-        which acts like SQL's IN (...).
-
-    Returns
-    -------
-    pandas.DataFrame  (the filtered rows; original is not modified)
+    Each keyword is a column name; its value is what that column must equal.
+    A value may be a single value, or a list/tuple to mean "any of these"
+    (like SQL's IN).
 
     Examples
     --------
-    select(df, scale="DES-T", data_type="mean")
-    select(df, sample=["patients", "community"])     # IN-style
+    select(df, scale="DES_T", data_type="mean")
+    select(df, sample_type="patients", subsample="taxon")
+    select(df, data_type=["mean", "median"])          # IN-style
+
+    Set show=True to also print the result.
     """
-    # Guard against typos in column names — fail loudly, not silently empty.
+    # Guard against a mistyped column name: fail loudly instead of silently
+    # returning nothing.
     unknown = set(filters) - set(df.columns)
     if unknown:
         raise KeyError(f"unknown column(s): {sorted(unknown)}. "
                        f"available: {list(df.columns)}")
 
-    mask = pd.Series(True, index=df.index)
+    # Start with "keep every row", then narrow down one filter at a time.
+    keep = pd.Series(True, index=df.index)
     for column, wanted in filters.items():
         if isinstance(wanted, (list, tuple, set)):
-            mask &= df[column].isin(wanted)        # column IN (...)
+            keep = keep & df[column].isin(wanted)      # column IN (...)
         else:
-            mask &= df[column] == wanted           # column = value
+            keep = keep & (df[column] == wanted)       # column = value
 
-    result = df[mask]
+    result = df[keep]
 
     if show:
         if result.empty:
             print("(no rows match)")
         else:
-            print(f"{len(result)} row(s) match:")
-            print(result.head(max_show).to_string(index=False))
-            if len(result) > max_show:
-                print(f"... ({len(result) - max_show} more rows not shown)")
+            print(f"{len(result)} row(s) match")
+            print(result.to_string(index=False))
 
     return result
 
 
 # ---------------------------------------------------------------------------
-# 2. Convenience: list the distinct values available in a column.
+# SELECT DISTINCT col
 # ---------------------------------------------------------------------------
 def distinct(df, column):
-    """Show the unique values in a column — handy for knowing what to filter on.
+    """Return the sorted unique values in one column.
 
-    E.g. distinct(df, "scale") tells you which scales are in the table.
+    Handy for discovering what you can filter on, e.g. distinct(df, "scale").
     """
     if column not in df.columns:
         raise KeyError(f"unknown column: {column!r}. available: {list(df.columns)}")
-    values = sorted(df[column].dropna().unique().tolist(), key=str)
-    # print(f"{column}: {values}")
-    return values
+    return sorted(df[column].dropna().unique().tolist(), key=str)
+
+
+# ---------------------------------------------------------------------------
+# A quick "what's in this table?" summary.
+# ---------------------------------------------------------------------------
+def overview(df):
+    """Return a small dataframe: for a few key columns, how many distinct values.
+
+    A fast orientation before you start querying.
+    """
+    key_columns = ["publication", "scale", "subscale", "record_type",
+                   "sample_type", "subsample", "data_type"]
+    rows = []
+    for col in key_columns:
+        if col in df.columns:
+            rows.append({"column": col,
+                         "distinct_values": df[col].nunique(dropna=True)})
+    return pd.DataFrame(rows)

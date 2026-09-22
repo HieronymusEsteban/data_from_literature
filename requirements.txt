@@ -1,0 +1,20 @@
+# --- PDF table / text extraction ---
+pdfplumber        # read text & tables from digital-native PDFs (character positions, no hallucination)
+camelot-py[base]  # alternative table extractor, strong on ruled (gridlined) tables
+# tabula-py       # another table extractor (needs Java); uncomment if you want it
+
+# --- Data handling & stats ---
+pandas            # dataframes: the backbone of steps 3 & 4
+numpy             # numerical helpers (used by pandas)
+
+# --- Notebook environment ---
+jupyterlab        # interactive notebooks for exploration & visual verification
+
+# --- Plotting (for the visual-inspection step) ---
+matplotlib        # basic plots to eyeball extracted data
+
+# --- Testing ---
+pytest            # unit tests for the deterministic transform functions
+
+# Note: OCR (for scanned PDFs) needs system packages (tesseract) + pytesseract.
+# We'll add that only if/when we hit an image-only PDF.

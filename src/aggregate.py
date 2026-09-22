@@ -1,101 +1,147 @@
 """
 aggregate.py
 ============
-STABLE module (step 4 — aggregation). Combines per-paper values from the
-consolidated long-format table into summary values.
+Combines per-paper values from the consolidated table into summary values,
+using a SAMPLE-SIZE-WEIGHTED average across papers:
 
-Main operation: a SAMPLE-SIZE-WEIGHTED mean of means across papers. When several
-papers each report a mean for the same (scale, sample), simply averaging those
-means treats a study of n=20 the same as a study of n=500. Weighting by
-sample_size gives larger studies proportionally more influence:
+    weighted_average = sum(value_i * n_i) / sum(n_i)
 
-    weighted_mean = sum(value_i * n_i) / sum(n_i)
+Bigger studies get proportionally more influence. The result reports what was
+aggregated (mean_of_means or mean_of_medians) so it is never ambiguous.
 
-Default grouping is by (scale, sample); you can change it. You choose which
-data_type to aggregate (e.g. only the rows where data_type == "mean").
+WHAT IT AGGREGATES
+------------------
+Only `mean` and `median` are allowed. `sd`, `minimum`, `maximum` are refused,
+because averaging those across studies is not statistically meaningful
+(you cannot recover a pooled SD by averaging SDs).
 
-For MANUAL selection instead of group-by, pre-filter with query.select() and
-pass the result in — aggregation will then operate on just those rows.
+Note on medians: a weighted mean of medians is a reasonable summary, but it is
+NOT the true median of the pooled data (that would need the raw data, which we
+do not have). The output labels it `mean_of_medians` to make this explicit.
 
-Public functions:
-  weighted_mean_by_group() - the weighted mean of means, grouped.
-  aggregate()              - convenience wrapper with data_type filtering.
+DEFAULT GROUPING (most granular)
+--------------------------------
+    scale, subscale, record_type, sample_type, subsample
+
+This keeps every smallest subsample as its own result row — the safe starting
+point. To aggregate UPWARD (e.g. pool all subsamples of a sample_type), pass a
+coarser `group_cols` that omits `subsample`.
+
+`scoring_rule` is deliberately NOT in the grouping: it is often undefined in the
+source papers, and we still want to include those studies.
+
+REDUNDANT ROWS
+--------------
+Rows flagged `redundant_aggregate == True` (whole-sample values that overlap
+their own subsamples) are removed before aggregating, so people are not counted
+twice.
+
+MAIN FUNCTION
+-------------
+  aggregate(df, data_type="mean") -> DataFrame
 """
-
-from __future__ import annotations
 
 import pandas as pd
 
+# Only these statistics may be aggregated.
+ALLOWED_DATA_TYPES = {"mean", "median"}
+
+# The most granular default grouping.
+DEFAULT_GROUP_COLS = ["scale", "subscale", "record_type",
+                      "sample_type", "subsample"]
+
 
 # ---------------------------------------------------------------------------
-# 1. Weighted mean of means, grouped by chosen columns.
+# The weighted average within each group.
 # ---------------------------------------------------------------------------
-def weighted_mean_by_group(df, group_cols=("scale", "sample"),
-                           value_col="value", weight_col="sample_size"):
-    """Sample-size-weighted mean of `value_col` within each group.
+def weighted_average_by_group(df, group_cols, value_col="value",
+                              weight_col="sample_size"):
+    """Sample-size-weighted average of `value_col` within each group.
 
-    Parameters
-    ----------
-    df : DataFrame
-        Rows to aggregate (already filtered to one data_type — see aggregate()).
-    group_cols : sequence of column names
-        The grouping. Default ("scale", "sample"): one result row per
-        scale-and-sample combination.
-    value_col, weight_col : str
-        Columns holding the value and the weight (sample size).
-
-    Returns
-    -------
-    DataFrame with the group columns plus:
-        weighted_mean : the weighted mean of means
-        n_studies     : how many papers (rows) went into each group
-        total_n       : the summed sample size of the group
-    Rows whose weight is missing/non-numeric are dropped, with a note.
+    Returns one row per group with:
+        weighted_value : the weighted average
+        n_studies      : how many rows (papers) went into the group
+        total_n        : the summed sample size of the group
+    Rows with a missing value or weight are dropped first (with a note).
     """
-    group_cols = list(group_cols)
-
     work = df.copy()
-    # weights must be numeric; "NA" or blanks can't be weighted.
+
+    # Weights and values must be numeric; anything unparseable becomes NaN.
     work[weight_col] = pd.to_numeric(work[weight_col], errors="coerce")
+    work[value_col] = pd.to_numeric(work[value_col], errors="coerce")
+
     before = len(work)
     work = work.dropna(subset=[weight_col, value_col])
     dropped = before - len(work)
     if dropped:
         print(f"note: dropped {dropped} row(s) with missing value/weight")
 
-    def _agg(group):
-        w = group[weight_col]
-        v = group[value_col]
-        return pd.Series({
-            "weighted_mean": (v * w).sum() / w.sum(),
-            "n_studies": len(group),
-            "total_n": w.sum(),
-        })
+    results = []
+    for group_key, group in work.groupby(group_cols, dropna=False):
+        weights = group[weight_col]
+        values = group[value_col]
+        weighted_value = (values * weights).sum() / weights.sum()
 
-    result = (work.groupby(group_cols, dropna=False)
-                  .apply(_agg, include_groups=False)
-                  .reset_index())
-    return result
+        # group_key is a single value if grouping on one column, else a tuple.
+        if not isinstance(group_key, tuple):
+            group_key = (group_key,)
+
+        row = dict(zip(group_cols, group_key))
+        row["weighted_value"] = weighted_value
+        row["n_studies"] = len(group)
+        row["total_n"] = weights.sum()
+        results.append(row)
+
+    return pd.DataFrame(results)
 
 
 # ---------------------------------------------------------------------------
-# 2. Convenience wrapper: pick the data_type, then aggregate.
+# The main entry point: pick a data_type, filter, then aggregate.
 # ---------------------------------------------------------------------------
-def aggregate(df, data_type="mean", group_cols=("scale", "sample")):
-    """Filter to one data_type, then weighted-mean-aggregate by group.
+def aggregate(df, data_type="mean", group_cols=None):
+    """Weighted-average one statistic across papers, grouped.
 
-    Example
+    Parameters
+    ----------
+    df : DataFrame
+        The consolidated table.
+    data_type : "mean" or "median"
+        Which statistic to aggregate. Anything else is refused.
+    group_cols : list of column names, optional
+        Grouping columns. Defaults to the most granular grouping
+        (scale, subscale, record_type, sample_type, subsample).
+        Pass a shorter list to aggregate upward.
+
+    Returns
     -------
-    # weighted mean of reported MEANS, per scale & sample:
-    aggregate(df, data_type="mean")
-
-    # aggregate a different statistic, e.g. medians, per scale only:
-    aggregate(df, data_type="median", group_cols=["scale"])
+    DataFrame with the group columns plus weighted_value, n_studies, total_n,
+    and an `aggregated_stat` column recording what was computed
+    (e.g. "mean_of_means", "mean_of_medians").
     """
-    if data_type is not None:
-        subset = df[df["data_type"] == data_type]
-        if subset.empty:
-            raise ValueError(f"no rows with data_type == {data_type!r}")
-    else:
-        subset = df
-    return weighted_mean_by_group(subset, group_cols=group_cols)
+    # Refuse statistics that must not be averaged across studies.
+    if data_type not in ALLOWED_DATA_TYPES:
+        raise ValueError(
+            f"data_type {data_type!r} cannot be aggregated. "
+            f"Allowed: {sorted(ALLOWED_DATA_TYPES)}. "
+            "(SD / minimum / maximum are excluded on purpose.)")
+
+    if group_cols is None:
+        group_cols = DEFAULT_GROUP_COLS
+
+    # 1. Keep only rows of the requested statistic.
+    subset = df[df["data_type"] == data_type]
+    if subset.empty:
+        raise ValueError(f"no rows with data_type == {data_type!r}")
+
+    # 2. Drop redundant whole-sample rows so people are not counted twice.
+    #    (Only if the column exists — older data may not have it.)
+    if "redundant_aggregate" in subset.columns:
+        subset = subset[subset["redundant_aggregate"] != True]  # noqa: E712
+
+    # 3. Weighted average within each group.
+    result = weighted_average_by_group(subset, group_cols)
+
+    # 4. Record what was aggregated, so the output is self-explaining.
+    result["aggregated_stat"] = f"mean_of_{data_type}s"
+
+    return result

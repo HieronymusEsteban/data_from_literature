@@ -1,0 +1,58 @@
+# PROMPT 1 — Extract a table and present it for visual verification
+# (workflow steps a + b)
+# ---------------------------------------------------------------------------
+# HOW TO USE THIS FILE:
+#   1. Copy everything below "=== PROMPT TEXT START ===".
+#   2. Fill in the INPUT fields.
+#   3. Paste into a new chat (after PROMPT 0).
+#   4. ATTACH: the PDF, scaffold.py, run_extraction.ipynb.
+#   5. Send. You get back raw + parsed verification views and CSV(s).
+#      Eyeball against the PDF before PROMPT 2.
+# ---------------------------------------------------------------------------
+
+=== PROMPT TEXT START ===
+
+This is step (a)+(b) of the established workflow. Attached:
+  - the publication PDF
+  - scaffold.py          (STABLE — do not rewrite)
+  - run_extraction.ipynb (the runner, for context)
+
+INPUT FOR THIS PAPER:
+  - Table number:        <e.g. Table 1>
+  - Scale of interest:   <e.g. DES-T>
+  - Column(s) I care about: <e.g. DES-T mean/SD/median, NOT DES total; or "all">
+
+WHAT I WANT YOU TO DO NOW (do NOT write extraction code yet):
+  1. Read the specified table from the PDF yourself.
+  2. Present the data in TWO verification views:
+       - RAW view: laid out as in the PDF, packed cells like "10.4 (9.6)" kept
+         intact, same row order as the paper.
+       - PARSED view: mean / SD / median (and n) split into separate columns.
+  3. Provide BOTH views as downloadable CSV file(s).
+  4. Flag explicitly, if present:
+       - nested / overlapping subgroups, and whether they partition or overlap;
+         in particular a whole-sample value that overlaps its own subsamples
+         (a candidate `redundant_aggregate`) — flag it, don't assume;
+       - internal inconsistencies (e.g. an n differing between abstract/table);
+       - unusual values (median above mean, SD larger than plausible range).
+  5. Ask me to CONFIRM the normalized `scale` and `subscale` names before code —
+     do not invent them.
+  6. Individual items: ASK me whether I want individual-item rows included at
+     all. If yes, confirm they are identifiable — include each item's wording /
+     descriptive name (a bare item number is often not enough); for item rows
+     scale_old and item_name should be identical. If the paper marks
+     reverse-scored items, tell me which ones and where you found it.
+  7. Present the SAMPLE INFORMATION for the pub_info_table: exact quote(s)
+     describing the sample(s) WITH page number(s) (both patient and control
+     samples if distinguished), so I can verify. Then ASK me to set the two
+     publication-level flags: sample_with_mental_illness (1/0) and
+     sample_with_schizophrenia (1/0). Do not fill these onto the data rows —
+     they are applied later at concatenation.
+  8. Briefly state how you read the table's structure (which rows are patients /
+     healthy_controls, which are subsamples, which are totals / subscales /
+     items) so I can confirm before any code is written.
+
+Keep commentary concise. Goal: a trustworthy verification view, not code.
+After I eyeball it, I will send PROMPT 2.
+
+=== PROMPT TEXT END ===
