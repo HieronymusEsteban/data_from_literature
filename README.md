@@ -17,7 +17,9 @@ consolidate them into a long-format CSV per scale, and select/aggregate.
 ├── src/                  # reusable Python modules (parsing, reshaping, aggregation)
 ├── tests/                # pytest unit tests for the src/ functions
 ├── notebooks/            # JupyterLab notebooks for exploration & visual verification
-├── docs/                 # setup guides + decision-and-assumptions log
+├── docs/
+│   ├──                   # setup guides + decision-and-assumptions log
+│   ├── claude_usage/     # information on AI assistant (Claude) usage and standard prompts
 ├── requirements.txt
 └── README.md
 ```
@@ -25,3 +27,7 @@ consolidate them into a long-format CSV per scale, and select/aggregate.
 ## Getting started
 
 See `docs/01_setup_venv.md` then `docs/02_run_jupyter.md`.
+
+## ETL processes:
+At the moment all etl processes are run from a jupyter lab notebook: `run_extraction.ipynb`
+This notebook relies on he module scaffold.py (stable module) as well as on throw-away-code speficic for one publication and generated with the help of an AI assistant (Claude, see 

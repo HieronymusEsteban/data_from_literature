@@ -40,5 +40,12 @@ measurements of different subscales, without clear indication if and to what deg
 subsamples overlap. Therefore, in some cases sample sizes can only be calculated for each 
 subscale measurement individually. 
 
+## Code:
+ETL-code as well as the code used to generate the output_excel.xlsx file can be found on: 
+https://github.com/HieronymusEsteban/data_from_literature
+
+## Data:
+The folder data mirrors in structure and in content the data folder that was used in the project on github (see above).
+
 
 
